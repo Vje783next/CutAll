@@ -1,6 +1,6 @@
 {
-  "name": "MediaCut",
-  "short_name": "MediaCut",
+  "name": "CUTALL",
+  "short_name": "CUTALL",
   "description": "Editor de medios — recorta imágenes, video y audio directamente en el navegador",
   "start_url": "./index.html",
   "display": "standalone",

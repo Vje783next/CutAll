@@ -6,11 +6,11 @@
 <meta name="theme-color" content="#080809">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
-<meta name="apple-mobile-web-app-title" content="MediaCut">
+<meta name="apple-mobile-web-app-title" content="CUTALL">
 <meta name="description" content="Editor de medios — recorta imágenes, video y audio en el navegador">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
-<title>MediaCut</title>
+<title>CUTALL</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600&family=Syne:wght@700;800&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
 /* ────────────────────────────────────────────────
@@ -993,7 +993,7 @@ html, body {
 
 <!-- ── PWA INSTALL BANNER ── -->
 <div class="install-banner" id="installBanner">
-  <span class="install-banner__text">Instala MediaCut en tu dispositivo para usarlo sin conexión</span>
+  <span class="install-banner__text">Instala CUTALL en tu dispositivo para usarlo sin conexión</span>
   <button class="install-banner__btn" id="installBtn">Instalar</button>
   <button class="install-banner__close" id="installClose" aria-label="Cerrar">✕</button>
 </div>
@@ -1008,7 +1008,7 @@ html, body {
         <path d="M8 8.5L16 12L8 15.5V8.5Z" fill="white"/>
         <path d="M8 7H9.5V17H8V7Z" fill="white"/>
       </svg>
-      <span class="topbar__wordmark">MediaCut</span>
+      <span class="topbar__wordmark">CUTALL</span>
     </div>
     <div class="topbar__tabs">
       <button class="topbar__tab topbar__tab--active" id="mob-nav-image" onclick="switchTab('image')">Img</button>
@@ -1355,22 +1355,45 @@ function iconMuted() {
 }
 
 /* ════════════════════════════════════════════════
-   RENDER CONTROLS (both containers)
+   RENDER CONTROLS
+   Inyecta el HTML sólo en el contenedor ACTIVO
+   según el breakpoint, evitando IDs duplicados.
 ════════════════════════════════════════════════ */
 const PANELS = { image: panelImage, video: panelVideo, audio: panelAudio };
 
+function activeContainer() {
+  /* En móvil/tablet (≤900px) el desktop está display:none → usamos mobile */
+  const desktop = document.getElementById('ctrlBodyDesktop');
+  const mobile  = document.getElementById('ctrlBodyMobile');
+  const desktopVisible = desktop.offsetParent !== null;
+  return desktopVisible ? [desktop] : [mobile];
+}
+
 function renderControls(tab) {
   const html = PANELS[tab]();
-  document.getElementById('ctrlBodyDesktop').innerHTML = html;
-  document.getElementById('ctrlBodyMobile').innerHTML = html;
 
-  /* Re-attach timeline drag after DOM injection */
+  /* Siempre limpiar ambos para no dejar contenido huérfano */
+  const desktop = document.getElementById('ctrlBodyDesktop');
+  const mobile  = document.getElementById('ctrlBodyMobile');
+  desktop.innerHTML = '';
+  mobile.innerHTML  = '';
+
+  /* Inyectar sólo en el visible */
+  const desktopVisible = desktop.offsetParent !== null;
+  if (desktopVisible) {
+    desktop.innerHTML = html;
+  } else {
+    mobile.innerHTML = html;
+  }
+
+  /* Re-attach tras inyección */
   if (tab === 'video') {
     tlDrag('videoTimeline','vidStart','vidEnd',()=>vidDur,updateVidRange);
     genVidFrames();
     updateVidRange();
     if (vidSegs.length) renderVidSegs();
-    if (videoFile) document.getElementById('vidCutBtn').disabled = false;
+    const vcb = document.getElementById('vidCutBtn');
+    if (vcb) vcb.disabled = !videoFile;
   }
   if (tab === 'audio') {
     updateAudRange();
@@ -1378,7 +1401,8 @@ function renderControls(tab) {
   }
   if (tab === 'image') {
     updateCropInputs();
-    if (hasCrop) document.getElementById('cropBtn').disabled = false;
+    const cb = document.getElementById('cropBtn');
+    if (cb) cb.disabled = !hasCrop;
   }
 }
 
@@ -1540,7 +1564,8 @@ canvas.addEventListener('mousemove', e => {
   if (drag === '__new__') {
     crop = clamp(toImgR({x:Math.min(mst.startX,x),y:Math.min(mst.startY,y),w:Math.abs(x-mst.startX),h:Math.abs(y-mst.startY)}));
     hasCrop = crop.w>2&&crop.h>2;
-    const cb = document.getElementById('cropBtn'); if (cb) cb.disabled = !hasCrop;
+    /* cropBtn puede estar en desktop o mobile — querySelector encuentra el primero visible */
+    document.querySelectorAll('#cropBtn').forEach(btn => btn.disabled = !hasCrop);
     renderCanvas(); updateCropInputs(); return;
   }
   if (drag && dragSt) {
@@ -1559,7 +1584,7 @@ canvas.addEventListener('mousedown', e => {
   e.preventDefault(); const {x,y} = toC(e.clientX,e.clientY);
   const h = handleAt(x,y);
   if (h) { drag=h; dragSt={mx:x,my:y,crop:{...crop}}; }
-  else { drag='__new__'; mst={startX:x,startY:y}; hasCrop=false; crop={x:0,y:0,w:0,h:0}; const cb=document.getElementById('cropBtn');if(cb)cb.disabled=true; renderCanvas(); }
+  else { drag='__new__'; mst={startX:x,startY:y}; hasCrop=false; crop={x:0,y:0,w:0,h:0}; document.querySelectorAll('#cropBtn').forEach(btn=>btn.disabled=true); renderCanvas(); }
 });
 window.addEventListener('mouseup', () => {
   if (drag==='__new__'&&crop.w<4&&crop.h<4) { hasCrop=false; renderCanvas(); }
@@ -1878,6 +1903,8 @@ async function cutAudio(){
   const fmt=(document.getElementById('audFmt')||{value:'wav'}).value;
   const st=document.getElementById('audStatus');
   st.textContent='Procesando…'; st.classList.add('status--visible');
+
+  /* Render offline buffer con volumen y fades */
   const sr=audioBuffer.sampleRate,ch=audioBuffer.numberOfChannels;
   const ss=Math.floor(s*sr),es=Math.floor(e*sr),len=es-ss;
   const off=new OfflineAudioContext(ch,len,sr);
@@ -1890,24 +1917,52 @@ async function cutAudio(){
   if(fo>0){const fs=Math.max(0,(e-s)-fo);gain.gain.setValueAtTime(vol,fs);gain.gain.linearRampToValueAtTime(0,e-s);}
   src.connect(gain); gain.connect(off.destination); src.start();
   const rendered=await off.startRendering();
+
+  /* WAV — siempre funciona */
   if(fmt==='wav'){
     dl(URL.createObjectURL(new Blob([bufToWav(rendered)],{type:'audio/wav'})),'recorte.wav');
     st.textContent='✓ Descargado como recorte.wav';
-  } else {
-    const mimes={ogg:'audio/ogg; codecs=opus',mp3:'audio/webm; codecs=opus'};
-    const mime=MediaRecorder.isTypeSupported(mimes[fmt])?mimes[fmt]:'audio/webm';
-    const ext=mime.includes('ogg')?'ogg':'webm';
-    if(!window.MediaRecorder||!MediaRecorder.isTypeSupported(mime)){
-      dl(URL.createObjectURL(new Blob([bufToWav(rendered)],{type:'audio/wav'})),'recorte.wav');
-      st.textContent='⚠ Formato no soportado, exportado como WAV'; return;
-    }
-    const ac=new AudioContext(),bs=ac.createBufferSource();bs.buffer=rendered;
-    const dest=ac.createMediaStreamDestination();bs.connect(dest);bs.start();
-    const mr=new MediaRecorder(dest.stream,{mimeType:mime}),chunks=[];
-    mr.ondataavailable=ev=>chunks.push(ev.data);
-    mr.onstop=()=>{dl(URL.createObjectURL(new Blob(chunks,{type:mime})),`recorte.${ext}`);st.textContent=`✓ recorte.${ext}`;ac.close();};
-    mr.start(); setTimeout(()=>mr.stop(),(e-s)*1000+200);
+    return;
   }
+
+  /* OGG / MP3 → MediaRecorder con detección real de MIME soportado */
+  if(!window.MediaRecorder){ 
+    dl(URL.createObjectURL(new Blob([bufToWav(rendered)],{type:'audio/wav'})),'recorte.wav');
+    st.textContent='⚠ MediaRecorder no disponible, exportado como WAV';
+    return;
+  }
+
+  /* Orden de preferencia según formato elegido */
+  const candidates = fmt==='ogg'
+    ? ['audio/ogg;codecs=opus','audio/ogg','audio/webm;codecs=opus','audio/webm']
+    : ['audio/mpeg','audio/webm;codecs=opus','audio/webm'];
+
+  const mime = candidates.find(m => { try { return MediaRecorder.isTypeSupported(m); } catch(e){ return false; } }) || '';
+
+  if(!mime){
+    dl(URL.createObjectURL(new Blob([bufToWav(rendered)],{type:'audio/wav'})),'recorte.wav');
+    st.textContent='⚠ Formato no soportado en este navegador, exportado como WAV';
+    return;
+  }
+
+  /* Determinar extensión */
+  let ext = 'webm';
+  if(mime.includes('ogg'))  ext = 'ogg';
+  else if(mime.includes('mpeg')) ext = 'mp3';
+
+  const ac=new AudioContext(),bs=ac.createBufferSource();
+  bs.buffer=rendered;
+  const dest=ac.createMediaStreamDestination();
+  bs.connect(dest); bs.start();
+  const mr=new MediaRecorder(dest.stream,{mimeType:mime}),chunks=[];
+  mr.ondataavailable=ev=>{ if(ev.data.size>0) chunks.push(ev.data); };
+  mr.onstop=()=>{
+    dl(URL.createObjectURL(new Blob(chunks,{type:mime})),`recorte.${ext}`);
+    st.textContent=`✓ recorte.${ext} (${mime})`;
+    ac.close();
+  };
+  mr.start(100); /* timeslice 100ms para recoger datos en móvil */
+  setTimeout(()=>mr.stop(),(e-s)*1000+300);
 }
 
 function bufToWav(buf){

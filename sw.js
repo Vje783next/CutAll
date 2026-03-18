@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mediacut-v1';
+const CACHE_NAME = 'cutall-v1';
 const ASSETS = [
   './index.html',
   './manifest.json',
